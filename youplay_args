@@ -1,10 +1,34 @@
 #!/bin/bash
+
+function display_help() {
+  printf "%s\t%s\n" "Usage:" "youplay [options] <search query>"
+  printf "%s\t%s\n" "-h" "Display this help"
+  printf "%s\t%s\n" "-?" "Display current status (active options...)"
+  printf "%s\t%s\n" "-t" "Display search results in tiny mode (80 characters wide)"
+  printf "%s\t%s\n" "-w" "Display search results in wide mode (default)"
+  printf "%s\t%s\n" "-s" "Play sound track only, saving bandwidth"
+  printf "%s\t%s\n" "-v" "Play with video (default)"
+  printf "%s\t%s\n" "-a" "Enable autoplay. After d seconds, a random video from the suggestions is automatically played"
+  printf "%s\t%s\n" "-d <number>" "Set delay (in seconds) before playing next video when autoplay is enabled"
+
+  printf "%s\t%s\n" "/r" "Replay previous video"
+}
+
+function display_status() {
+  conf_file=$youplay_folder/youplay.conf
+  vars=$(cat $conf_file | grep '^export  *[^#=]*=' | sed 's/^export  *\([^= ]*\)=.*$/\1/' | sort -u)
+  for var in $vars; do
+    value=${!var}
+    echo -e "$var\t=\t$value"
+  done
+}
+
 if [[ "$conf_exported" != "true" ]]; then
   youplay_folder=$(readlink -f "${BASH_SOURCE[0]}" | xargs dirname)
   [[ ! -f $youplay_folder/youplay.conf ]] && { echo "Could not find youplay.conf!"; exit 1; }
   source $youplay_folder/youplay.conf
 fi
-while getopts ":twad:sv" opt; do
+while getopts ":twad:svh?" opt; do
   case ${opt} in
     t )
       echo "Enabling tiny mode"
@@ -33,6 +57,12 @@ while getopts ":twad:sv" opt; do
     v )
       echo "Enable video"
       export audio_only=false
+      ;;
+    h )
+      display_help
+      ;;
+    ? )
+      display_status
       ;;
     \? )
       echo "Invalid option: $OPTARG" 1>&2

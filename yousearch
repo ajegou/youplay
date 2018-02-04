@@ -153,6 +153,7 @@ function extract_additional_args() {
 
 query=$@
 if [[ -z $query ]]; then
+  $youplay_folder/youplay_args -h
   exit 1
 fi
 
