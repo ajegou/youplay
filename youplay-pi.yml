@@ -8,6 +8,7 @@
       - libxml2-utils
       - python-pip
       - python3-pip
+      - curl
     become: true
 
   - name: install pip packages
