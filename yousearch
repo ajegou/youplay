@@ -6,6 +6,53 @@ youplay_folder=$(readlink -f "${BASH_SOURCE[0]}" | xargs dirname)
 [[ ! -f $youplay_folder/youplay_args ]] && { echo "Could not find args parser!"; exit 1; } 
 source $youplay_folder/youplay_args
 
+declare -A links
+declare -A displays
+declare -a not_seen
+
+function search_videos() {
+  if [[ "$query" == *youtube.com/watch* ]]; then
+    echo "Looking up videos from page: '$query'"
+    search_url=$query
+    mode="video"
+    div="content-wrapper"
+  elif [[ "$query" == *youtube.com/user* ]]; then
+    echo "Looking up videos from user: '$query'"
+    search_url=$query
+    mode="user"
+    div="yt-lockup-content"
+  else
+    echo "Searching videos for: '$query'"
+    search_url="https://www.youtube.com/results?search_query="$(echo $query | sed 's/ /%20/g') # would be good to properly encode the query
+    mode="search"
+    div="yt-lockup-content"
+  fi
+
+  # Crawl
+  idx=1
+  while read line; do
+    if [[ -z $line ]]; then
+      continue
+    fi
+    extract_line $idx $line
+    idx=$(($idx + 1))
+  done < <(curl --silent --header 'Accept-Language: en' "$search_url" | tr -d '\n' | xmllint --html --xpath "//div[@class = \"$div\"]" - 2> /dev/null | sed "s/\(<div class=\"$div\"\)/\n\1/g")
+
+  idx=1
+  while [[ ! -z ${displays[$idx]} ]]; do
+    echo -e "${displays[$idx]}"
+    idx=$(($idx + 1))
+  done
+}
+
+
+function read_input() {
+  [[ "$autoplay" == "true" ]] && timeout="-t $autoplay_delay"
+  read $timeout -p 'Watchiou wanna see? ' input
+#  [[ -z $input ]] && input=$(select_random_video) && echo "$input (selected randomly)"
+  extract_additional_args $input
+}
+
 # Truncate strings that are too long, and space padd the ones that are too short
 function truncate_and_padd() {
   allign=$1
@@ -154,52 +201,13 @@ function extract_additional_args() {
 query=$@
 if [[ -z $query ]]; then
   $youplay_folder/youplay_args -h
-  exit 1
-fi
-
-if [[ "$query" == *youtube.com/watch* ]]; then
-  echo "Looking up videos from page: '$query'"
-  search_url=$query
-  mode="video"
-  div="content-wrapper"
-elif [[ "$query" == *youtube.com/user* ]]; then
-  echo "Looking up videos from user: '$query'"
-  search_url=$query
-  mode="user"
-  div="yt-lockup-content"
+  read_input
 else
-  echo "Searching videos for: '$query'"
-  search_url="https://www.youtube.com/results?search_query="$(echo $query | sed 's/ /%20/g') # would be good to properly encode the query
-  mode="search"
-  div="yt-lockup-content"
+  search_videos
+  read_input
 fi
 
-# Crawl
-idx=1
-declare -A links
-declare -A displays
-declare -a not_seen
-while read line; do
-  if [[ -z $line ]]; then
-    continue
-  fi
-  extract_line $idx $line
-  idx=$(($idx + 1))
-done < <(curl --silent --header 'Accept-Language: en' "$search_url" | tr -d '\n' | xmllint --html --xpath "//div[@class = \"$div\"]" - 2> /dev/null | sed "s/\(<div class=\"$div\"\)/\n\1/g")
-
-idx=1
-while [[ ! -z ${displays[$idx]} ]]; do
-  echo -e "${displays[$idx]}"
-  idx=$(($idx + 1))
-done
-
-[[ "$autoplay" == "true" ]] && timeout="-t $autoplay_delay"
-read $timeout -p 'Watchiou wanna see? ' input
-[[ -z $input ]] && input=$(select_random_video) && echo "$input (selected randomly)"
-
-extract_additional_args $input
-
-if [[ "$input" = "/r" ]]; then # replay
+if [[ "$input" = "/r" || -z $input ]]; then # replay
   todo=$query
 elif [[ ! -z ${links[$input]} ]]; then # selected from suggestion
   todo=${links[$input]}
