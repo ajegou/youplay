@@ -10,6 +10,9 @@ function display_help() {
   printf "%s\t%s\n" "-v" "Play with video (default)"
   printf "%s\t%s\n" "-a" "Enable autoplay. After d seconds, a random video from the suggestions is automatically played"
   printf "%s\t%s\n" "-d <number>" "Set delay (in seconds) before playing next video when autoplay is enabled"
+  printf "%s\t%s\n" "-m" "Stream videos (default)"
+  printf "%s\t%s\n" "-l" "Download videos instead of playing them"
+  printf "%s\t%s\n" "-o" "Output folder for downloaded videos"
 
   printf "%s\t%s\n" "/r" "Replay previous video"
 }
@@ -28,7 +31,7 @@ if [[ "$conf_exported" != "true" ]]; then
   [[ ! -f $youplay_folder/youplay.conf ]] && { echo "Could not find youplay.conf!"; exit 1; }
   source $youplay_folder/youplay.conf
 fi
-while getopts ":twad:svh?" opt; do
+while getopts ":twad:svmlo:h?" opt; do
   case ${opt} in
     t )
       echo "Enabling tiny mode"
@@ -57,6 +60,18 @@ while getopts ":twad:svh?" opt; do
     v )
       echo "Enable video"
       export audio_only=false
+      ;;
+    m )
+      echo "Enable streaming"
+      export download=false
+      ;;
+    l )
+      echo "Enable download"
+      export download=true
+      ;;
+    o )
+      echo "Setting download output to $OPTARG"
+      export download_folder=$OPTARG
       ;;
     h )
       display_help
