@@ -66,12 +66,21 @@ while getopts ":twad:svmlo:h?" opt; do
       export download=false
       ;;
     l )
-      echo "Enable download"
-      export download=true
+      if [[ -w $(dirname "$download_output"X) ]]; then
+        echo "Enable download"
+        export download=true
+      else
+        echo "You do not have write rights on $download_output"
+        echo "A valid output must be set before enabling download"
+      fi
       ;;
     o )
-      echo "Setting download output to $OPTARG"
-      export download_folder=$OPTARG
+      if [[ -w $(dirname "$OPTARG"X) ]]; then
+        echo "Setting download output to $OPTARG"
+        export download_output=$OPTARG
+      else
+        echo "You do not have write rights on $OPTARG"
+      fi
       ;;
     h )
       display_help

@@ -21,7 +21,15 @@ while read id; do # Loop in case we are reading a playlist
   # Play
   if [[ "$download" == "true" ]]; then
     echo -e "Downloading: $title ($url)"
-    youtube-dl -o "$download_folder%(title)s-%(id)s.%(ext)s" --format $format "$url"
+    # X is to prevent going up in case $download_output is a folder
+    download_dir=$(dirname "$download_output"X)
+    available_space=$(df --output=avail $download_dir | tail -1)
+    if [[ $available_space -gt $min_avail_space ]]; then
+      youtube-dl -o "$download_output%(title)s-%(id)s.%(ext)s" --format $format "$url"
+    else
+      echo "Not enough free space in '$download_dir', skipping download"
+      autoplay=false
+    fi
   else
     echo -e "Playing: $title ($url)"
     ${player} "$stream" > /dev/null 2>&1 </dev/tty
