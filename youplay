@@ -24,7 +24,10 @@ while read id; do # Loop in case we are reading a playlist
   ${player} "$stream" > /dev/null 2>&1 </dev/tty
   exit_code=$?
   # For playlists: break the loop if the video is stopped with a ctrl-c or error
-  [[ $exit_code != 0 && $exit_code != 3 ]] && break # omxplayer exits with 0 when stopped with 'q'
+  if [[ $exit_code != 0 && $exit_code != 3 ]]; then
+    autoplay=false # when the video is stopped with ctrl-c or error, we disable the autoplay
+    break # omxplayer exits with 0 when stopped with 'q'
+  fi
 done < <(youtube-dl --get-id "$src")
 
 $youplay_folder/yousearch "$src"
