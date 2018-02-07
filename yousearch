@@ -180,13 +180,36 @@ function extract_line() {
 }
 
 function select_random_video() {
-  n_not_seen=${#not_seen[@]}
-  if [[ $n_not_seen -gt 0 ]] && [[ "$autoplay_seen" != "true" ]]; then
-    i=$(($RANDOM % $n_not_seen))
-    echo ${not_seen[$i]}
+  local idx=0
+  if [[ "$autoplay_seen" != "true" ]] && [[ ${#not_seen[@]} -gt 0 ]]; then
+    # if we want to prioritize unseen videos and we have some, we choose from there
+    choose_from=(${not_seen[@]})
   else
-    echo $((($RANDOM % ($idx - 1)) + 1))
+    choose_from=($(seq -s ' ' 1 ${#links[@]}))
   fi
+
+  choose_from_size=${#choose_from[@]}
+
+  if [[ "$auto_selection" == "first" ]]; then
+    # select the first video
+    echo ${choose_from[0]}
+  elif [[ $auto_selection == "random" ]]; then
+    # select a video uniformly at random
+    idx=$(($RANDOM % $choose_from_size))
+  elif [[ "$auto_selection" == "linear-bias" ]]; then
+    # select a random video with a bias towards the first videos
+    idx=0
+    chances=$choose_from_size
+    total=$(($choose_from_size * ($choose_from_size + 1) / 2))
+    rnd=$(($RANDOM % $total))
+    while [[ $rnd -gt $chances ]]; do
+      total=$(($total - $chances))
+      chances=$(($chances - 1))
+      idx=$(($idx + 1))
+      rnd=$(($RANDOM % $total))
+    done
+  fi
+  echo ${choose_from[$idx]}
 }
 
 # extract additional arguments if any
