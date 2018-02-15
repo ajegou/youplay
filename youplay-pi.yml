@@ -38,7 +38,7 @@
     become: true
 
   - name: set omxplayer as default player
-    lineinfile: dest=/opt/youplay/youplay.conf line='export player="omxplayer -b -o local"'
+    lineinfile: dest=/opt/youplay/youplay.conf line='export player="omxplayer -b -o hdmi -r"'
     become: true
 
   - name: set default format to mp4
