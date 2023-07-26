@@ -14,7 +14,7 @@
   - name: install pip packages
     pip: name={{item}} state=latest
     with_items:
-      - youtube-dl
+      - yt-dlp
     become: true
 
   - name: Create /opt/youplay

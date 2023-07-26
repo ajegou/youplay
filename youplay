@@ -9,7 +9,7 @@ source $youplay_folder/youplay_args
 src="$*"
 while read id; do # Loop in case we are reading a playlist
   url="https://www.youtube.com/watch?v=$id"
-  info=$(youtube-dl --get-title --get-url --format $format "$url")
+  info=$(yt-dlp --get-title --get-url --format $format "$url")
   title=$(echo -e "$info" | head -1)
   stream=$(echo -e "$info" | tail -1)
 
@@ -25,7 +25,7 @@ while read id; do # Loop in case we are reading a playlist
     download_dir=$(dirname "$download_output"X)
     available_space=$(df --output=avail $download_dir | tail -1)
     if [[ $available_space -gt $min_avail_space ]]; then
-      youtube-dl -o "$download_output%(title)s-%(id)s.%(ext)s" --format $format "$url"
+      yt-dlp -o "$download_output%(title)s-%(id)s.%(ext)s" --format $format "$url"
     else
       echo "Not enough free space in '$download_dir', skipping download"
       autoplay=false
@@ -41,6 +41,6 @@ while read id; do # Loop in case we are reading a playlist
     autoplay=false # when the video is stopped with ctrl-c or error, we disable the autoplay
     break # omxplayer exits with 0 when stopped with 'q'
   fi
-done < <(youtube-dl --get-id "$src")
+done < <(yt-dlp --get-id "$src")
 
 $youplay_folder/yousearch "$src"
