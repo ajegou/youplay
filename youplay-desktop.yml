@@ -5,10 +5,10 @@
     apt: name={{item}} state=latest
     with_items:
       - mplayer
-      - libxml2-utils
       - python-pip
       - python3-pip
       - curl
+      - jq
     become: true
 
   - name: install pip packages

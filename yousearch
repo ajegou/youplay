@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# requires xmllint (package libxml2-utils) and youtube-dl (package youtube-dl, but should be updated frequently)
+# requires and yt-dlp (package yt-dlp, but should be updated frequently)
 
 youplay_folder=$(readlink -f "${BASH_SOURCE[0]}" | xargs dirname)
 [[ ! -f $youplay_folder/youplay_args ]] && { echo "Could not find args parser!"; exit 1; } 
@@ -11,36 +11,59 @@ declare -A displays
 declare -a not_seen
 
 function search_videos() {
-  if [[ "$query" == *youtube.com/watch* ]]; then
-    echo "Looking up videos from page: '$query'"
-    search_url=$query
-    mode="video"
-    div="content-wrapper"
-  elif [[ "$query" == *youtube.com/user* ]]; then
-    echo "Looking up videos from user: '$query'"
-    search_url=$query
-    mode="user"
-    div="yt-lockup-content"
-  else
-    echo "Searching videos for: '$query'"
-    search_url="https://www.youtube.com/results?search_query="$(echo $query | sed 's/ /%20/g') # would be good to properly encode the query
-    mode="search"
-    div="yt-lockup-content"
-  fi
+  # Get webpage and extract channels and videos from a <script></script>
+  curl --silent --header 'Accept-Language: en' "$search_url" |
+    tr -d '\n' |
+    sed 's/<script[^>]*>/\n/g' |
+    sed 's;</script>;\n;g' |
+    grep 'var ytInitialData' |
+    sed 's/.*ytInitialData =//' |
+    sed 's/;$//' |
+    jq '.' > response.json
 
-  # Crawl
-  idx=1
-  while read line; do
-    if [[ -z $line ]]; then
-      continue
-    fi
-    extract_line $idx $line
+  # Search for channels
+  jq '[
+      .. |
+      .channelRenderer? |
+      select( . != null ) |
+      {
+        owner: .title.simpleText,
+        url: .navigationEndpoint?.commandMetadata?.webCommandMetadata?.url?,
+        id: .channelId,
+        type: "Channel"
+      } |
+      select( .url != null )
+    ] |
+    unique'  response.json > response-channels.json
+  
+  # Search for videos
+  jq '[
+      .. |
+      .videoRenderer?, .compactVideoRenderer?, .endScreenVideoRenderer? |
+      { 
+        title: (.title.runs[]?.text, .title.simpleText),
+        id: .videoId,
+        length: .lengthText.simpleText,
+        owner: .shortBylineText.runs[]?.text,
+        type: "Video"
+      } |
+      select( .title != null )
+    ] |
+    unique' response.json > response-videos.json
+
+  # Display
+  idx=0
+  local_idx=0
+  while [[ $idx -lt $(jq 'length' response-videos.json) ]]; do
+    extract_json $idx "$(jq .[$idx] response-videos.json)"
+    local_idx=$(($local_idx + 1))
     idx=$(($idx + 1))
-  done < <(curl --silent --header 'Accept-Language: en' "$search_url" | tr -d '\n' | xmllint --html --xpath "//div[@class = \"$div\"]" - 2> /dev/null | sed "s/\(<div class=\"$div\"\)/\n\1/g")
+  done
 
-  idx=1
-  while [[ ! -z ${displays[$idx]} ]]; do
-    echo -e "${displays[$idx]}"
+  local_idx=0
+  while [[ $local_idx -lt $(jq 'length' response-channels.json) ]]; do
+    extract_json $idx "$(jq .[$local_idx] response-channels.json)"
+    local_idx=$(($local_idx + 1))
     idx=$(($idx + 1))
   done
 }
@@ -83,65 +106,20 @@ function decode_html_characters() {
  echo $* | perl -MHTML::Entities -pe 'decode_entities($_);'
 }
 
-function extract_title() {
-  # Using string(//a/@title) causes some improper decoding of the title, so we have to use //a/@title and get the text by hand
-  title=$(echo $* | xmllint --html --xpath '(//a/@title)[1]' -)
-  title=$(echo $title | sed "s/^title=['\"]\(.*\)['\"]$/\1/")
-  # Remove trailing spaces
-  title=$(echo $title | sed 's/^ *//' | sed 's/ *$//')
-  echo "$title"
-}
-
-function extract_url() {
-  url="https://www.youtube.com"$(echo $* | xmllint --html --xpath 'string(//a/@href)' -)
-  echo $url
-}
-
-function extract_duration() {
-  duration=$(echo $* | xmllint --html --xpath 'string(//span[@class="accessible-description"])' -)
-  duration=$(echo $duration | grep 'Duration')
-  duration=$(echo $duration | sed 's/.*Duration: //' | sed 's/. *$//')
-  if [[ $duration != *:[0-9]* ]]; then
-    hours=$(echo $duration | grep -o '[0-9] hour' | sed 's_ hour__' | xargs printf "%02d")
-    minutes=$(echo $duration | grep -o '[0-9]* minute' | sed 's_ minute__' | xargs printf "%02d")
-    seconds=$(echo $duration | grep -o '[0-9]* second' | sed 's_ second__' | xargs printf "%02d")
-    if [[ $hours -gt 0 ]]; then
-      duration=${hours}:${minutes}:${seconds}
-    else
-      duration=${minutes}:${seconds}
-    fi
-  fi
-  echo "$duration"
-}
-
-function extract_user() {
-  if [[ $mode == user ]]; then
-    user=$(echo $query | sed 's;.*user/;;')
-  elif [[ $mode == search ]]; then
-    user=$(echo $* | xmllint --html --xpath '//div[@class="yt-lockup-byline "]/a/text()' -)
-  else
-    user=$(echo $* | xmllint --html --xpath '//span[@class="stat attribution"]/span/text()' -)
-  fi
-  echo "$user"
-}
-
-function extract_line() {
+function extract_json() {
   local idx=$1
   shift 1
-  line=$*
-  url=$(extract_url $line)
-  title=$(extract_title $line)
-  duration=$(extract_duration $line)
+  json=$*
 
-  if [[ "$url" == *youtube.com/watch* ]]; then
-    [[ "$url" == *youtube.com/watch*list=* ]] && type=Playlist || type=Video
-    user=$(extract_user $line)
-  elif [[ "$url" == *youtube.com/user* ]]; then
-    type=User
-    user=$title
+  user=$(echo "$json" | jq -r '.owner')
+  type=$(echo "$json" | jq -r '.type')
+
+  if [[ "$type" == "Video" ]]; then
+    url=https://www.youtube.com/watch?v=$(echo "$json" | jq -r '.id')
+    title=$(echo "$json" | jq -r '.title')
+    duration=$(echo "$json" | jq -r '.length')
   else
-    type=Other
-    user=$(extract_user $line)
+    url=https://www.youtube.com$(echo "$json" | jq -r '.url')
   fi
 
   if grep $'\t'$url$'\t' "$history_file" > /dev/null 2>&1; then
@@ -153,7 +131,7 @@ function extract_line() {
     not_seen+=($idx)
   fi
 
-  # Decode html special characters (can't be done earlier as it conflicts with xmllint)
+  # Decode html special characters (not sure if this is still needed)
   user=$(decode_html_characters $user)
   title=$(decode_html_characters $title)
 
@@ -176,7 +154,7 @@ function extract_line() {
   fi
 
   links[$idx]="$url"
-  displays[$idx]="$display"
+  echo -e "$display"
 }
 
 function select_random_video() {
